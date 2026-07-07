@@ -1,0 +1,456 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+project_name: tedge-mosquitto
+
+# The mosquitto version is pinned in src/build.zig.zon. The package/tarball
+# version comes from the git tag being released (or a -SNAPSHOT version for
+# local/PR builds). Tag the mosquitto version being shipped, optionally with a
+# packaging revision, e.g. `2.1.2` or `2.1.2-2`.
+release:
+  draft: true
+  prerelease: auto
+  name_template: "tedge-mosquitto {{ .Version }}"
+
+snapshot:
+  version_template: "{{ .Version }}"
+
+before:
+  hooks:
+    # WORKAROUND: manually create zig fetch cache folder. Remove once https://codeberg.org/ziglang/zig/issues/35264
+    # next ziglang version is released
+    - sh -xc 'mkdir -p $(zig env | grep .global_cache_dir | cut -d\" -f2)/tmp'
+    # fetch the dependencies up-front to reduce race conditions when building multiple targets
+    - sh -c 'cd ./src && zig build --fetch=all'
+
+builds:
+  - &build-default
+    id: mosquitto
+    builder: zig
+    binary: mosquitto
+    targets:
+      - x86_64-linux-musl
+      - aarch64-linux-musl
+      - arm-linux-musleabihf
+      - riscv64-linux-musl
+    dir: ./src
+    tool: zig
+    flags:
+      - --release=small
+      - -Doptimize=ReleaseSmall
+      - -DWITH_TLS={{ eq (envOrDefault "WITH_TLS" "true") "true" }}
+  - &build-armv6
+    # armv6
+    id: mosquitto-armv6
+    <<: *build-default
+    targets:
+      - arm-linux-musleabi
+    flags:
+      - --release=small
+      - -Doptimize=ReleaseSmall
+      - -DWITH_TLS={{ eq (envOrDefault "WITH_TLS" "true") "true" }}
+      - -Dcpu=arm1176jzf_s
+  #
+  # UPX'd binaries
+  #
+  - #
+    id: mosquitto-upx
+    <<: *build-default
+
+  - #
+    id: mosquitto-upx-armv6
+    <<: *build-armv6
+  #
+  # GNU libc (dynamically linked) builds
+  #
+  # OPENSSL selects how OpenSSL is linked into the GNU binaries (see build.zig):
+  #   - static (default): ~3MB of OpenSSL bundled into every binary.
+  #   - shared: one libssl.so.3/libcrypto.so.3 built & shipped to
+  #     /usr/lib/mosquitto, shared by all binaries via rpath (much smaller, still
+  #     self-contained, works cross-compiled). The .so files are added to the GNU
+  #     package/archive below.
+  #   - system: link the target's system OpenSSL (native builds only).
+  - &build-gnu
+    id: mosquitto-gnu
+    builder: zig
+    binary: mosquitto
+    targets:
+      # Zig defaults to glibc 2.17 for x86_64/aarch64/arm and 2.27 for riscv64,
+      # which are already conservative maximally-compatible minimums.
+      - x86_64-linux-gnu
+      - aarch64-linux-gnu
+      - arm-linux-gnueabihf
+      - riscv64-linux-gnu
+    dir: ./src
+    tool: zig
+    flags:
+      - --release=small
+      - -Doptimize=ReleaseSmall
+      - -DWITH_TLS={{ eq (envOrDefault "WITH_TLS" "true") "true" }}
+      - -DOPENSSL={{ envOrDefault "OPENSSL" "shared" }}
+  - &build-gnu-armv6
+    # armv6 gnu
+    id: mosquitto-gnu-armv6
+    <<: *build-gnu
+    targets:
+      - arm-linux-gnueabi
+    flags:
+      - --release=small
+      - -Doptimize=ReleaseSmall
+      - -DWITH_TLS={{ eq (envOrDefault "WITH_TLS" "true") "true" }}
+      - -DOPENSSL={{ envOrDefault "OPENSSL" "shared" }}
+      - -Dcpu=arm1176jzf_s
+
+archives:
+  - id: mosquitto-archive
+    ids:
+      - mosquitto
+    formats:
+      - tar.gz
+    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    # CLI tools — byproducts of the broker's zig build in zig-out/<target>/bin/.
+    # Placed at the archive root next to the auto-added mosquitto binary. The
+    # whole-list anchor is reused by the armv6 musl archive; the gnu archives
+    # repeat the entries (a whole-list alias can't be merged with the plugin/
+    # openssl files).
+    files: &archive-tool-files
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_pub'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_sub'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_rr'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_passwd'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_ctrl'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_db_dump'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_signal'
+        dst: .
+        strip_parent: true
+
+  - id: mosquitto-archive-armv6
+    ids:
+      - mosquitto-armv6
+    formats:
+      - tar.gz
+    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    files: *archive-tool-files
+
+  # upx'd archives
+  - id: mosquitto-archive-upx
+    ids:
+      - mosquitto-upx
+    formats:
+      - tar.gz
+    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}-upx_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+
+  - id: mosquitto-archive-upx-armv6
+    ids:
+      - mosquitto-upx-armv6
+    formats:
+      - tar.gz
+    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}-upx_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+
+  # gnu libc archives
+  - id: mosquitto-archive-gnu
+    ids:
+      - mosquitto-gnu
+    formats:
+      - tar.gz
+    name_template: '{{ envOrDefault "PACKAGE_NAME_GNU" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-gnu") }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    files:
+      # shared OpenSSL — only present when OPENSSL=shared. The binaries' rpath
+      # finds them under lib/ in the archive.
+      - src: 'src/zig-out/{{ .Target }}/lib/libcrypto.so.3'
+        dst: lib/
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/lib/libssl.so.3'
+        dst: lib/
+        strip_parent: true
+      # CLI tools (same set as the musl archive), at the archive root
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_pub'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_sub'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_rr'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_passwd'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_ctrl'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_db_dump'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_signal'
+        dst: .
+        strip_parent: true
+
+  - id: mosquitto-archive-gnu-armv6
+    ids:
+      - mosquitto-gnu-armv6
+    formats:
+      - tar.gz
+    name_template: '{{ envOrDefault "PACKAGE_NAME_GNU" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-gnu") }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    # NOTE: not a YAML alias of the gnu archive's files list — kept verbatim.
+    files:
+      - src: 'src/zig-out/{{ .Target }}/lib/libcrypto.so.3'
+        dst: lib/
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/lib/libssl.so.3'
+        dst: lib/
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_pub'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_sub'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_rr'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_passwd'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_ctrl'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_db_dump'
+        dst: .
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_signal'
+        dst: .
+        strip_parent: true
+
+nfpms:
+  # note that this is an array of nfpm configs
+  - &linux-package-defaults
+    # ID of the nfpm config, must be unique.
+    id: mosquitto-linux-packages
+    ids:
+      - mosquitto
+
+    package_name: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}'
+    file_name_template: '{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    vendor: thin-edge.io
+    homepage: https://thin-edge.io
+    maintainer: thin-edge.io <info@thin-edge.io>
+    license: BSD
+    description: |
+      An Open Source MQTT v3.1/v3.1.1 Broker
+
+      Mosquitto is an open source message broker that implements the MQ Telemetry
+      Transport protocol version 3.1 and 3.1.1 MQTT provides a lightweight method
+      of carrying out messaging using a publish/subscribe model. This makes it
+      suitable for "machine to machine" messaging such as with low power sensors
+      or mobile devices such as phones, embedded computers or micro-controllers
+      like the Arduino.
+
+      This is the thin-edge.io flavoured mosquitto build, statically compiled and
+      shipped with sensible defaults for edge devices.
+
+    formats:
+      - apk
+      - deb
+      - rpm
+      - termux.deb
+      - archlinux
+      - ipk
+
+    provides:
+      - mosquitto
+      - mosquitto-clients
+
+    replaces:
+      - mosquitto
+      - mosquitto-clients
+
+    conflicts:
+      - mosquitto
+
+    # Path that the binaries should be installed.
+    bindir: /usr/sbin
+    version_metadata: git
+    section: default
+    priority: extra
+
+    # Contents to add to the package.
+    # GoReleaser will automatically add the binaries.
+    #
+    # NOTE: plugins are intentionally NOT shipped here. The musl builds are fully
+    # statically linked, and musl does not support dlopen() from a static binary,
+    # so plugins cannot be loaded.
+    contents: &nfpm-common-contents
+      - &content-certs-readme
+        src: packaging/conf/certs/README
+        dst: /etc/mosquitto/certs/README
+        type: config
+
+      - &content-ca-certificates-readme
+        src: packaging/conf/ca_certificates/README
+        dst: /etc/mosquitto/ca_certificates/README
+        type: config
+
+      - &content-mosquitto-conf
+        src: packaging/conf/mosquitto.conf
+        dst: /etc/mosquitto/mosquitto.conf
+        type: config
+
+      # sensible thin-edge.io defaults, dropped into the include dir so a user's
+      # own /etc/mosquitto/mosquitto.conf edits are never clobbered on upgrade.
+      - &content-confd-buffer
+        src: packaging/conf/conf.d/10_buffer.conf
+        dst: /etc/mosquitto/conf.d/10_buffer.conf
+        type: config
+
+      - &content-confd-logging
+        src: packaging/conf/conf.d/20_logging.conf
+        dst: /etc/mosquitto/conf.d/20_logging.conf
+        type: config
+
+      - &content-confd-local-listener
+        src: packaging/conf/conf.d/30_local_listener.conf
+        dst: /etc/mosquitto/conf.d/30_local_listener.conf
+        type: config
+
+      - &content-confd-readme
+        src: packaging/conf/conf.d/README
+        dst: /etc/mosquitto/conf.d/README
+        type: config
+
+      - &content-var-lib
+        dst: /var/lib/mosquitto
+        type: dir
+        file_info:
+          owner: mosquitto
+          group: mosquitto
+          mode: 700
+
+      # systemd definition
+      - &content-systemd
+        src: packaging/services/systemd/mosquitto.service
+        dst: /usr/lib/systemd/system/mosquitto.service
+        file_info:
+          mode: 0644
+
+      # sysvinit definition
+      - &content-sysvinit
+        src: packaging/services/sysvinit/mosquitto
+        dst: /usr/lib/tedge-services/sysvinit/mosquitto
+        file_info:
+          mode: 0755
+
+      # mosquitto CLI tools — byproducts of the broker's `zig build`, found in
+      # zig-out/<target>/bin/. mosquitto_passwd and mosquitto_ctrl require
+      # WITH_TLS=true.
+      - &content-tool-pub
+        src: 'src/zig-out/{{ .Target }}/bin/mosquitto_pub'
+        dst: /usr/bin/mosquitto_pub
+      - &content-tool-sub
+        src: 'src/zig-out/{{ .Target }}/bin/mosquitto_sub'
+        dst: /usr/bin/mosquitto_sub
+      - &content-tool-rr
+        src: 'src/zig-out/{{ .Target }}/bin/mosquitto_rr'
+        dst: /usr/bin/mosquitto_rr
+      - &content-tool-passwd
+        src: 'src/zig-out/{{ .Target }}/bin/mosquitto_passwd'
+        dst: /usr/bin/mosquitto_passwd
+      - &content-tool-ctrl
+        src: 'src/zig-out/{{ .Target }}/bin/mosquitto_ctrl'
+        dst: /usr/bin/mosquitto_ctrl
+      - &content-tool-db-dump
+        src: 'src/zig-out/{{ .Target }}/bin/mosquitto_db_dump'
+        dst: /usr/bin/mosquitto_db_dump
+      - &content-tool-signal
+        src: 'src/zig-out/{{ .Target }}/bin/mosquitto_signal'
+        dst: /usr/bin/mosquitto_signal
+
+    scripts:
+      preinstall: ./packaging/scripts/preinstall.sh
+      postinstall: ./packaging/scripts/postinstall.sh
+      preremove: ./packaging/scripts/preremove.sh
+      postremove: ./packaging/scripts/postremove.sh
+
+  - #
+    # build linux packages due to armhf and arm are both named "arm"
+    <<: *linux-package-defaults
+    id: mosquitto-linux-packages-arvm6
+    ids:
+      - mosquitto-armv6
+    file_name_template: '{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+
+  # gnu libc packages
+  - &linux-gnu-package-defaults
+    <<: *linux-package-defaults
+    id: mosquitto-gnu-linux-packages
+    ids:
+      - mosquitto-gnu
+    package_name: '{{ envOrDefault "PACKAGE_NAME_GNU" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-gnu") }}'
+    file_name_template: '{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    # GNU builds are dynamically linked. Ship the shared OpenSSL alongside the
+    # common contents; YAML merge keys (<<) cannot concatenate sequences, so the
+    # common items are referenced individually via their anchors.
+    contents:
+      # shared OpenSSL — only present when OPENSSL=shared. Installed where the
+      # binaries' rpath looks.
+      - src: 'src/zig-out/{{ .Target }}/lib/libcrypto.so.3'
+        dst: /usr/lib/mosquitto/libcrypto.so.3
+      - src: 'src/zig-out/{{ .Target }}/lib/libssl.so.3'
+        dst: /usr/lib/mosquitto/libssl.so.3
+
+      - *content-certs-readme
+      - *content-ca-certificates-readme
+      - *content-mosquitto-conf
+      - *content-confd-buffer
+      - *content-confd-logging
+      - *content-confd-local-listener
+      - *content-confd-readme
+      - *content-var-lib
+      - *content-systemd
+      - *content-sysvinit
+      # CLI tools (same set as the musl package)
+      - *content-tool-pub
+      - *content-tool-sub
+      - *content-tool-rr
+      - *content-tool-passwd
+      - *content-tool-ctrl
+      - *content-tool-db-dump
+      - *content-tool-signal
+
+  - #
+    <<: *linux-gnu-package-defaults
+    id: mosquitto-gnu-linux-packages-armv6
+    ids:
+      - mosquitto-gnu-armv6
+    file_name_template: '{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+
+upx:
+  - # Whether to enable it or not.
+    enabled: false
+
+    # Filter by build ID.
+    ids: [mosquitto-upx, mosquitto-upx-armv6]
+
+    # Filter by GOOS.
+    goos: [linux]
+
+    # Compress argument.
+    # Valid options are from '1' (faster) to '9' (better), and 'best'.
+    compress: best
+
+    # Whether to try LZMA (slower).
+    lzma: true
+
+    # Whether to try all methods and filters (slow).
+    brute: true

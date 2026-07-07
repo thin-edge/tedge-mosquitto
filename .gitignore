@@ -1,0 +1,12 @@
+# local secrets / cloudsmith token (provided via CI secrets, never committed)
+.env
+
+# build outputs
+dist/
+*.log
+
+# zig build artifacts (build runs inside ./src)
+src/cjson/
+src/zig-out/
+src/.zig-cache/
+src/zig-pkg/
