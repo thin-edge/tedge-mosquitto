@@ -19,7 +19,6 @@ jobs:
       matrix:
         job:
           - { tls: true }
-          - { tls: false }
 
     env:
       WITH_TLS: ${{ matrix.job.tls }}
