@@ -12,16 +12,14 @@ on:
 
 jobs:
   build:
-    name: Build (tls=${{ matrix.job.tls }})
+    name: Build (${{ matrix.libc }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        job:
-          - { tls: true }
-
-    env:
-      WITH_TLS: ${{ matrix.job.tls }}
+        include:
+          - { libc: musl, dist: dist }
+          - { libc: gnu, dist: dist-gnu }
 
     steps:
       - name: Checkout
@@ -36,7 +34,7 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: ${{ steps.zig-version.outputs.version }}
-          cache-key: build-tls-${{ matrix.job.tls }}
+          cache-key: build-${{ matrix.libc }}
 
       - uses: extractions/setup-just@v2
         with:
@@ -49,16 +47,16 @@ jobs:
           install-only: true
 
       - name: Build packages and tarballs
-        run: just build
+        run: just build-libc ${{ matrix.libc }}
 
       - name: Smoke test (broker + client round trip)
-        run: just smoke-test
+        run: just smoke-test --libc ${{ matrix.libc }} --path ${{ matrix.dist }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tedge-mosquitto-tls-${{ matrix.job.tls }}
-          path: dist/*.*
+          name: tedge-mosquitto-${{ matrix.libc }}
+          path: ${{ matrix.dist }}/*.*
 
   build-pass:
     name: Build Pass

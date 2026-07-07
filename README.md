@@ -61,10 +61,15 @@ Build without TLS:
 just WITH_TLS=false build
 ```
 
-The resulting linux packages and tarballs are written to `dist/`:
+The two libc flavors are built by separate goreleaser configs
+(`.goreleaser.musl.yaml` / `.goreleaser.gnu.yaml`) so CI can build them in
+parallel. `just build` runs both: the musl packages/tarballs land in `dist/`
+and the gnu ones in `dist-gnu/`. To build a single flavor, use
+`just build-libc musl` or `just build-libc gnu`.
 
 ```sh
-ls -l dist/
+ls -l dist/       # musl (statically linked)
+ls -l dist-gnu/   # gnu (dynamically linked)
 
 # Using DNF (Fedora, RHEL, AmazonLinux)
 dnf install dist/tedge-mosquitto-musl*.rpm
@@ -74,10 +79,12 @@ apt-get install ./dist/tedge-mosquitto-musl*.deb
 ```
 
 Smoke test the freshly built host artifacts (starts the broker and does a
-publish/subscribe round trip):
+publish/subscribe round trip). Defaults to the musl flavor; pass `--libc gnu`
+(with `--path dist-gnu`) for the gnu build:
 
 ```sh
 just smoke-test
+just smoke-test --libc gnu --path dist-gnu
 ```
 
 ### Building manually

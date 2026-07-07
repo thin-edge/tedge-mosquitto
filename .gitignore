@@ -1,8 +1,9 @@
 # local secrets / cloudsmith token (provided via CI secrets, never committed)
 .env
 
-# build outputs
+# build outputs (musl -> dist/, gnu -> dist-gnu/)
 dist/
+dist-gnu/
 *.log
 
 # zig build artifacts (build runs inside ./src)

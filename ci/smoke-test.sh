@@ -11,13 +11,15 @@ set -euo pipefail
 
 SOURCE_PATH="dist"
 PACKAGE_NAME="tedge-mosquitto"
+LIBC="musl"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --path) SOURCE_PATH="$2"; shift ;;
         --name) PACKAGE_NAME="$2"; shift ;;
+        --libc) LIBC="$2"; shift ;;
         --help|-h)
-            echo "Usage: $0 [--path <dist_dir>] [--name <package_name>]"
+            echo "Usage: $0 [--path <dist_dir>] [--name <package_name>] [--libc musl|gnu]"
             exit 0
             ;;
         *) echo "Unrecognized argument: $1" >&2; exit 1 ;;
@@ -25,11 +27,11 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Pick the host (amd64, musl, non-upx) tarball. The musl archives carry an
-# explicit -musl suffix (mirroring the -gnu variant); -musl-upx is excluded.
-tarball=$(find "$SOURCE_PATH" -maxdepth 1 -name "${PACKAGE_NAME}-musl_*_linux_amd64.tar.gz" ! -name '*-upx*' | head -n1)
+# Pick the host (amd64, non-upx) tarball for the requested libc flavor. Both
+# flavors carry an explicit -musl/-gnu suffix; the musl -upx variant is excluded.
+tarball=$(find "$SOURCE_PATH" -maxdepth 1 -name "${PACKAGE_NAME}-${LIBC}_*_linux_amd64.tar.gz" ! -name '*-upx*' | head -n1)
 if [ -z "$tarball" ]; then
-    echo "ERROR: could not find host tarball ${PACKAGE_NAME}-musl_*_linux_amd64.tar.gz under $SOURCE_PATH" >&2
+    echo "ERROR: could not find host tarball ${PACKAGE_NAME}-${LIBC}_*_linux_amd64.tar.gz under $SOURCE_PATH" >&2
     ls -la "$SOURCE_PATH" >&2 || true
     exit 1
 fi

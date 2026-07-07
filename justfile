@@ -1,11 +1,12 @@
 set dotenv-load
 
-# Package name. The no-TLS build gets a distinct name so both can coexist in the
-# package repository.
-export PACKAGE_NAME := env("PACKAGE_NAME", if WITH_TLS == "true" { "tedge-mosquitto" } else { "tedge-mosquitto-notls" })
-
 # Build mosquitto with TLS support. Accepts either 'true' or 'false'.
 export WITH_TLS := env("WITH_TLS", "true")
+
+# Package base name is normally supplied by each goreleaser config's project_name
+# (tedge-mosquitto-musl / -gnu). PACKAGE_NAME overrides it if set in the
+# environment; build-libc also sets it for the no-TLS build (tedge-mosquitto-notls-<libc>)
+# so that variant gets a distinct name and can coexist in the package repo.
 
 # How OpenSSL is linked into the GNU builds (see src/build.zig). Accepts:
 #   static  - bundle ~3MB of OpenSSL into every binary (self-contained)
@@ -18,20 +19,37 @@ export OPENSSL := env("OPENSSL", "shared")
 # the git tag being pushed; this only affects the file names of local builds.
 VERSION := env("VERSION", "2.1.2")
 
-# output directory for the linux packages and tarballs
+# output directories for the linux packages and tarballs. The build is split by
+# libc into two goreleaser configs (.goreleaser.musl.yaml / .goreleaser.gnu.yaml)
+# so the two flavors can build in parallel CI jobs; each writes to its own dir.
 OUTPUT_DIR := "dist"
+# NOTE: keep in sync with `dist:` in .goreleaser.gnu.yaml (used by clean/publish
+# to find the gnu artifacts).
+GNU_OUTPUT_DIR := "dist-gnu"
 
-# Build and package all artifacts as a snapshot (never publishes). This is what
-# local development and the PR checks use.
+# Snapshot-build a single libc flavor (musl|gnu). Never publishes. This is the
+# per-flavor unit the CI matrix runs in parallel. For the no-TLS build the
+# package name gets a distinct -notls-<libc> suffix (otherwise project_name wins).
+build-libc LIBC *ARGS='':
+    {{ if WITH_TLS == "true" { "" } else { "PACKAGE_NAME=tedge-mosquitto-notls-" + LIBC } }} GORELEASER_CURRENT_TAG={{VERSION}} goreleaser release --config .goreleaser.{{LIBC}}.yaml --clean --snapshot --parallelism 1 --skip=announce,publish,validate {{ARGS}}
+
+# Build and package all artifacts (both libc flavors) as a snapshot. musl lands
+# in {{OUTPUT_DIR}}, gnu in {{GNU_OUTPUT_DIR}} (the gnu output dir is set via `dist:`
+# in .goreleaser.gnu.yaml). This is what local development uses; the PR checks run
+# the two flavors as separate `build-libc` matrix jobs instead.
 build *ARGS='':
-    GORELEASER_CURRENT_TAG={{VERSION}} goreleaser release --clean --snapshot --parallelism 1 --skip=announce,publish,validate {{ARGS}}
+    just build-libc musl {{ARGS}}
+    just build-libc gnu {{ARGS}}
 
-# Full release: goreleaser derives the version from the pushed git tag, builds
-# every artifact and creates the (draft) GitHub release. Run by CI on a tag.
-# Note: --parallelism 1 works around an openssl-dependency race when building
-# multiple targets in parallel.
+# Full release: goreleaser derives the version from the pushed git tag and builds
+# every artifact. musl runs first and creates the single (draft) GitHub release;
+# gnu runs second and appends its artifacts to that same release (release.mode:
+# append in .goreleaser.gnu.yaml). Order matters — the creator must run first.
+# Run by CI on a tag. Note: --parallelism 1 works around an openssl-dependency
+# race when building multiple targets in parallel.
 release *ARGS='':
-    goreleaser release --clean --auto-snapshot --parallelism 1 {{ARGS}}
+    goreleaser release --config .goreleaser.musl.yaml --clean --auto-snapshot --parallelism 1 {{ARGS}}
+    goreleaser release --config .goreleaser.gnu.yaml --clean --auto-snapshot --parallelism 1 {{ARGS}}
 
 # Build using the native zig command for the host target (helps with debugging
 # the build.zig itself).
@@ -44,14 +62,19 @@ build-native *ARGS='':
     @echo
 
 # Smoke test the freshly built host (amd64) artifacts: start the broker and do a
-# publish/subscribe round trip with the bundled clients.
+# publish/subscribe round trip with the bundled clients. Defaults to the musl
+# flavor in {{OUTPUT_DIR}}; for gnu pass e.g. `just smoke-test --libc gnu --path {{GNU_OUTPUT_DIR}}`.
 smoke-test *ARGS='':
     ./ci/smoke-test.sh --path "{{OUTPUT_DIR}}" {{ARGS}}
 
 # Remove the build outputs
 clean:
-    rm -rf {{OUTPUT_DIR}}
+    rm -rf {{OUTPUT_DIR}} {{GNU_OUTPUT_DIR}}
 
-# Publish the linux packages (*.deb/*.rpm/*.apk/...) and tarballs to Cloudsmith
+# Publish the linux packages (*.deb/*.rpm/*.apk) to Cloudsmith.
+# NOTE: for now only the gnu packages are published, and the raw tarballs are
+# skipped. To also publish the musl packages, re-add:
+#     ./ci/publish.sh --path "{{OUTPUT_DIR}}" {{args}}
+# and drop --skip-tarballs to also upload the raw *.tar.gz artifacts.
 publish *args="":
-    ./ci/publish.sh --path "{{OUTPUT_DIR}}" {{args}}
+    ./ci/publish.sh --path "{{GNU_OUTPUT_DIR}}" --skip-tarballs {{args}}

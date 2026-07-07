@@ -17,6 +17,7 @@ Flags:
     --owner <string>            Debian repository owner
     --repo <string>             Name of the debian repository to publish to
     --path <source_path>        Directory containing the files to publish
+    --skip-tarballs             Skip the raw *.tar.gz upload; publish only deb/rpm/apk
     --help|-h                   Show this help
 
 Optional Environment variables (instead of flags)
@@ -39,6 +40,7 @@ PUBLISH_TOKEN="${PUBLISH_TOKEN:-}"
 PUBLISH_OWNER="${PUBLISH_OWNER:-thinedge}"
 PUBLISH_REPO="${PUBLISH_REPO:-community}"
 SOURCE_PATH="./"
+SKIP_TARBALLS="false"
 
 
 #
@@ -70,6 +72,11 @@ do
         --repo)
             PUBLISH_REPO="$2"
             shift
+            ;;
+
+        # Skip the raw tarball (*.tar.gz) upload; publish only deb/rpm/apk
+        --skip-tarballs)
+            SKIP_TARBALLS="true"
             ;;
 
         --help|-h)
@@ -206,7 +213,11 @@ publish_raw() {
     done
 }
 
-publish_raw "$SOURCE_PATH" "*.tar.gz"
+if [ "$SKIP_TARBALLS" = "true" ]; then
+    echo "Skipping raw tarball (*.tar.gz) upload (--skip-tarballs)"
+else
+    publish_raw "$SOURCE_PATH" "*.tar.gz"
+fi
 
 publish_linux "$SOURCE_PATH" "*.deb" deb "any-distro/any-version"
 publish_linux "$SOURCE_PATH" "*.rpm" rpm "any-distro/any-version"
