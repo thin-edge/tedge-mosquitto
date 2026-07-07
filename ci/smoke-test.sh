@@ -25,10 +25,11 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Pick the host (amd64, musl, non-upx) tarball.
-tarball=$(find "$SOURCE_PATH" -maxdepth 1 -name "${PACKAGE_NAME}_*_linux_amd64.tar.gz" ! -name '*-upx*' ! -name '*-gnu*' | head -n1)
+# Pick the host (amd64, musl, non-upx) tarball. The musl archives carry an
+# explicit -musl suffix (mirroring the -gnu variant); -musl-upx is excluded.
+tarball=$(find "$SOURCE_PATH" -maxdepth 1 -name "${PACKAGE_NAME}-musl_*_linux_amd64.tar.gz" ! -name '*-upx*' | head -n1)
 if [ -z "$tarball" ]; then
-    echo "ERROR: could not find host tarball ${PACKAGE_NAME}_*_linux_amd64.tar.gz under $SOURCE_PATH" >&2
+    echo "ERROR: could not find host tarball ${PACKAGE_NAME}-musl_*_linux_amd64.tar.gz under $SOURCE_PATH" >&2
     ls -la "$SOURCE_PATH" >&2 || true
     exit 1
 fi

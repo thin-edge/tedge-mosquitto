@@ -106,7 +106,7 @@ archives:
       - mosquitto
     formats:
       - tar.gz
-    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    name_template: '{{ envOrDefault "PACKAGE_NAME_MUSL" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-musl") }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
     # CLI tools — byproducts of the broker's zig build in zig-out/<target>/bin/.
     # Placed at the archive root next to the auto-added mosquitto binary. The
     # whole-list anchor is reused by the armv6 musl archive; the gnu archives
@@ -140,7 +140,7 @@ archives:
       - mosquitto-armv6
     formats:
       - tar.gz
-    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    name_template: '{{ envOrDefault "PACKAGE_NAME_MUSL" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-musl") }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
     files: *archive-tool-files
 
   # upx'd archives
@@ -149,14 +149,14 @@ archives:
       - mosquitto-upx
     formats:
       - tar.gz
-    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}-upx_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    name_template: '{{ envOrDefault "PACKAGE_NAME_MUSL" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-musl") }}-upx_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
 
   - id: mosquitto-archive-upx-armv6
     ids:
       - mosquitto-upx-armv6
     formats:
       - tar.gz
-    name_template: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}-upx_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    name_template: '{{ envOrDefault "PACKAGE_NAME_MUSL" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-musl") }}-upx_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ .Arm }}{{ end }}v6{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
 
   # gnu libc archives
   - id: mosquitto-archive-gnu
@@ -241,7 +241,7 @@ nfpms:
     ids:
       - mosquitto
 
-    package_name: '{{ envOrDefault "PACKAGE_NAME" .ProjectName }}'
+    package_name: '{{ envOrDefault "PACKAGE_NAME_MUSL" (print (envOrDefault "PACKAGE_NAME" .ProjectName) "-musl") }}'
     file_name_template: '{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
     vendor: thin-edge.io
     homepage: https://thin-edge.io
@@ -278,6 +278,7 @@ nfpms:
 
     conflicts:
       - mosquitto
+      - mosquitto-clients
 
     # Path that the binaries should be installed.
     bindir: /usr/sbin

@@ -14,7 +14,7 @@ new mosquitto releases are adopted.
 
 ## What you get
 
-- statically linked (musl) broker + client binaries — no runtime dependencies
+- statically linked (musl) broker + client binaries (`tedge-mosquitto-musl`) — no runtime dependencies
 - a GNU/glibc variant (`tedge-mosquitto-gnu`) that ships a shared OpenSSL
 - TLS support (with an option to disable it: `tedge-mosquitto-notls`)
 - bridge support enabled
@@ -67,10 +67,10 @@ The resulting linux packages and tarballs are written to `dist/`:
 ls -l dist/
 
 # Using DNF (Fedora, RHEL, AmazonLinux)
-dnf install dist/tedge-mosquitto*.rpm
+dnf install dist/tedge-mosquitto-musl*.rpm
 
 # Using Debian/Ubuntu
-apt-get install ./dist/tedge-mosquitto*.deb
+apt-get install ./dist/tedge-mosquitto-musl*.deb
 ```
 
 Smoke test the freshly built host artifacts (starts the broker and does a
