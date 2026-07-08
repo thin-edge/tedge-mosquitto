@@ -144,6 +144,8 @@ pub fn build(b: *std.Build) !void {
     mosquitto.root_module.addIncludePath(mosquitto_dep.path("lib"));
     mosquitto.root_module.addIncludePath(mosquitto_dep.path("libcommon"));
     mosquitto.root_module.addIncludePath(mosquitto_dep.path("deps"));
+    // builtin websockets: http_client.c/http_serv.c do #include "picohttpparser.h"
+    mosquitto.root_module.addIncludePath(mosquitto_dep.path("deps/picohttpparser"));
     mosquitto.root_module.addIncludePath(mosquitto_dep.path("include"));
 
     const cjson_dep = b.dependency("cjson", .{});
@@ -335,6 +337,10 @@ pub fn build(b: *std.Build) !void {
         "src/websockets.c",
         "src/will_delay.c",
         "src/xtreport.c",
+
+        // builtin websockets HTTP parser (WITH_WEBSOCKETS=WS_IS_BUILTIN);
+        // compiles to unused code when websockets are disabled.
+        "deps/picohttpparser/picohttpparser.c",
     };
 
     // construct build arguments
@@ -344,6 +350,15 @@ pub fn build(b: *std.Build) !void {
     // optional flags
     if (with_tls) {
         try mosquitto_flags.append(alloc, "-DWITH_TLS");
+        // TLS-PSK support (upstream default). Gated by TLS; config.h only
+        // derives FINAL_WITH_TLS_PSK when WITH_TLS is also set.
+        try mosquitto_flags.append(alloc, "-DWITH_TLS_PSK");
+        // Builtin websockets (no libwebsockets dependency), matching upstream's
+        // default. Upstream requires WITH_TLS for websockets, so it is gated
+        // here; without this define net_ws.c/websockets.c/http_client.c compile
+        // to no-ops and mosquitto reports "Websockets support NOT available".
+        // Needs the bundled picohttpparser (added to the sources below).
+        try mosquitto_flags.append(alloc, "-DWITH_WEBSOCKETS=WS_IS_BUILTIN");
     }
 
     // common flags
@@ -564,9 +579,10 @@ pub fn build(b: *std.Build) !void {
     // shared libmosquitto.so.
     // -------------------------------------------------------------------------
 
-    // libmosquitto client library sources (the lib/ CMake C_SRC list, minus the
-    // websockets-only picohttpparser dep which is not built here).
+    // libmosquitto client library sources (the lib/ CMake C_SRC list, including
+    // the builtin-websockets picohttpparser dep — see WITH_WEBSOCKETS above).
     const lib_client_sources = [_][]const u8{
+        "deps/picohttpparser/picohttpparser.c",
         "lib/actions_publish.c",
         "lib/actions_subscribe.c",
         "lib/actions_unsubscribe.c",
@@ -620,7 +636,13 @@ pub fn build(b: *std.Build) !void {
     // Flags for the client tools: client mode (no -DWITH_BROKER), TLS optional.
     var client_flags: std.ArrayList([]const u8) = .empty;
     defer client_flags.deinit(alloc);
-    if (with_tls) try client_flags.append(alloc, "-DWITH_TLS");
+    if (with_tls) {
+        try client_flags.append(alloc, "-DWITH_TLS");
+        try client_flags.append(alloc, "-DWITH_TLS_PSK");
+        // builtin websockets — keep the client library in sync with the broker
+        // so mosquitto_pub/sub/rr can speak ws:// / wss://.
+        try client_flags.append(alloc, "-DWITH_WEBSOCKETS=WS_IS_BUILTIN");
+    }
     try client_flags.append(alloc, plugin_version_flag);
     try client_flags.append(alloc, "-Wall");
     try client_flags.append(alloc, "-W");
@@ -882,6 +904,8 @@ fn buildTool(
     exe.root_module.addIncludePath(mosquitto_dep.path("libcommon"));
     exe.root_module.addIncludePath(mosquitto_dep.path("common"));
     exe.root_module.addIncludePath(mosquitto_dep.path("deps"));
+    // builtin websockets: http_client.c does #include "picohttpparser.h"
+    exe.root_module.addIncludePath(mosquitto_dep.path("deps/picohttpparser"));
     exe.root_module.addIncludePath(mosquitto_dep.path("client"));
     exe.root_module.addIncludePath(mosquitto_dep.path("apps/mosquitto_passwd"));
     exe.root_module.addIncludePath(mosquitto_dep.path("plugins/common"));
