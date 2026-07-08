@@ -194,11 +194,9 @@ nfpms:
     contents:
       - src: packaging/conf/certs/README
         dst: /etc/mosquitto/certs/README
-        type: config
 
       - src: packaging/conf/ca_certificates/README
         dst: /etc/mosquitto/ca_certificates/README
-        type: config
 
       - src: packaging/conf/mosquitto.conf
         dst: /etc/mosquitto/mosquitto.conf
@@ -214,27 +212,12 @@ nfpms:
         dst: /etc/mosquitto/conf.d/20_logging.conf
         type: config
 
-      - src: packaging/conf/conf.d/30_local_listener.conf
-        dst: /etc/mosquitto/conf.d/30_local_listener.conf
-        type: config
+      # - src: packaging/conf/conf.d/30_local_listener.conf
+      #   dst: /etc/mosquitto/conf.d/30_local_listener.conf
+      #   type: config
 
       - src: packaging/conf/conf.d/README
         dst: /etc/mosquitto/conf.d/README
-        type: config
-
-      - dst: /var/lib/mosquitto
-        type: dir
-        file_info:
-          owner: mosquitto
-          group: mosquitto
-          mode: 700
-
-      - dst: /var/log/mosquitto
-        type: dir
-        file_info:
-          owner: mosquitto
-          group: mosquitto
-          mode: 755
 
       # systemd definition
       - src: packaging/services/systemd/mosquitto.service
