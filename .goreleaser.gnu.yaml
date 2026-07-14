@@ -99,6 +99,18 @@ archives:
       - src: 'src/zig-out/{{ .Target }}/lib/libssl.so.3'
         dst: lib/
         strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_password_file.so'
+        dst: lib/
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_dynamic_security.so'
+        dst: lib/
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_acl_file.so'
+        dst: lib/
+        strip_parent: true
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_persist_sqlite.so'
+        dst: lib/
+        strip_parent: true
       - src: 'src/zig-out/{{ .Target }}/bin/mosquitto_pub'
         dst: .
         strip_parent: true
@@ -227,6 +239,19 @@ nfpms:
         dst: /usr/lib/tedge-services/sysvinit/mosquitto
         file_info:
           mode: 0755
+
+      # common mosquitto plugins      
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_password_file.so'
+        dst: /usr/lib/mosquitto/
+
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_dynamic_security.so'
+        dst: /usr/lib/mosquitto/
+
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_acl_file.so'
+        dst: /usr/lib/mosquitto/
+
+      - src: 'src/zig-out/{{ .Target }}/lib/libmosquitto_persist_sqlite.so'
+        dst: /usr/lib/mosquitto/
 
       # mosquitto CLI tools — byproducts of the broker's `zig build`, found in
       # zig-out/<target>/bin/. mosquitto_passwd and mosquitto_ctrl require
