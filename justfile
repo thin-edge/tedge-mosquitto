@@ -22,9 +22,9 @@ VERSION := env("VERSION", "2.1.2")
 # output directories for the linux packages and tarballs. The build is split by
 # libc into two goreleaser configs (.goreleaser.musl.yaml / .goreleaser.gnu.yaml)
 # so the two flavors can build in parallel CI jobs; each writes to its own dir.
-OUTPUT_DIR := "dist"
-# NOTE: keep in sync with `dist:` in .goreleaser.gnu.yaml (used by clean/publish
-# to find the gnu artifacts).
+# NOTE: keep these in sync with `dist:` in the respective goreleaser configs
+# (used by clean/publish to find each flavor's artifacts).
+OUTPUT_DIR := "dist-musl"
 GNU_OUTPUT_DIR := "dist-gnu"
 
 # Snapshot-build a single libc flavor (musl|gnu). Never publishes. This is the
@@ -34,9 +34,9 @@ build-libc LIBC *ARGS='':
     {{ if WITH_TLS == "true" { "" } else { "PACKAGE_NAME=tedge-mosquitto-notls-" + LIBC } }} GORELEASER_CURRENT_TAG={{VERSION}} goreleaser release --config .goreleaser.{{LIBC}}.yaml --clean --snapshot --parallelism 1 --skip=announce,publish,validate {{ARGS}}
 
 # Build and package all artifacts (both libc flavors) as a snapshot. musl lands
-# in {{OUTPUT_DIR}}, gnu in {{GNU_OUTPUT_DIR}} (the gnu output dir is set via `dist:`
-# in .goreleaser.gnu.yaml). This is what local development uses; the PR checks run
-# the two flavors as separate `build-libc` matrix jobs instead.
+# in {{OUTPUT_DIR}}, gnu in {{GNU_OUTPUT_DIR}} (each output dir is set via `dist:`
+# in the respective goreleaser config). This is what local development uses; the
+# PR checks run the two flavors as separate `build-libc` matrix jobs instead.
 build *ARGS='':
     just build-libc musl {{ARGS}}
     just build-libc gnu {{ARGS}}
@@ -47,9 +47,17 @@ build *ARGS='':
 # append in .goreleaser.gnu.yaml). Order matters — the creator must run first.
 # Run by CI on a tag. Note: --parallelism 1 works around an openssl-dependency
 # race when building multiple targets in parallel.
+#
+# Do NOT use --auto-snapshot here: this recipe is for real tagged releases only
+# (use `just build` for local snapshots). --auto-snapshot silently downgrades a
+# run to a snapshot if the working tree is dirty, which skips the GitHub release
+# upload entirely — the failure mode that dropped the gnu artifacts. The dirtying
+# culprit (the CI zig cache) is now gitignored; --skip=validate on the gnu run is
+# belt-and-suspenders so a stray untracked file can never re-trigger it (the musl
+# run already validated the git state, so re-validating gnu adds nothing).
 release *ARGS='':
-    goreleaser release --config .goreleaser.musl.yaml --clean --auto-snapshot --parallelism 1 {{ARGS}}
-    goreleaser release --config .goreleaser.gnu.yaml --clean --auto-snapshot --parallelism 1 {{ARGS}}
+    goreleaser release --config .goreleaser.musl.yaml --clean --parallelism 1 {{ARGS}}
+    goreleaser release --config .goreleaser.gnu.yaml --clean --parallelism 1 --skip=validate {{ARGS}}
 
 # Build using the native zig command for the host target (helps with debugging
 # the build.zig itself).

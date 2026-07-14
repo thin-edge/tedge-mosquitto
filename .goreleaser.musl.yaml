@@ -18,6 +18,11 @@ version: 2
 # name (e.g. the no-TLS build uses tedge-mosquitto-notls-musl; see the justfile).
 project_name: tedge-mosquitto-musl
 
+# Write to a dedicated dir (mirrors dist-gnu in .goreleaser.gnu.yaml) so the musl
+# and gnu builds can coexist on one machine — the release flow builds both, and
+# `just publish` uploads from these dirs to the package repository.
+dist: dist-musl
+
 # The mosquitto version is pinned in src/build.zig.zon. The package/tarball
 # version comes from the git tag being released (or a -SNAPSHOT version for
 # local/PR builds). Tag the mosquitto version being shipped, optionally with a

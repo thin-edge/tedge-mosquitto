@@ -1,8 +1,8 @@
 # local secrets / cloudsmith token (provided via CI secrets, never committed)
 .env
 
-# build outputs (musl -> dist/, gnu -> dist-gnu/)
-dist/
+# build outputs (musl -> dist-musl/, gnu -> dist-gnu/)
+dist-musl/
 dist-gnu/
 *.log
 
@@ -11,3 +11,9 @@ src/cjson/
 src/zig-out/
 src/.zig-cache/
 src/zig-pkg/
+
+# zig cache at the repo root. On CI, mlugg/setup-zig points ZIG_GLOBAL/LOCAL_CACHE_DIR
+# here; if left untracked it makes the working tree dirty, which silently degrades
+# the second (gnu) goreleaser pass in `just release` into a snapshot (skipping the
+# GitHub release upload). Locally zig uses ~/.cache/zig instead, so this stays empty.
+/.zig-cache/

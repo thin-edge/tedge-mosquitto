@@ -9,7 +9,7 @@ set -euo pipefail
 # linked broker + clients actually run, and (with TLS) that OpenSSL is wired up.
 # -----------------------------------------------------------------------------
 
-SOURCE_PATH="dist"
+SOURCE_PATH="dist-musl"
 PACKAGE_NAME="tedge-mosquitto"
 LIBC="musl"
 

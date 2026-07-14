@@ -17,9 +17,9 @@ version: 2
 # name (e.g. the no-TLS build uses tedge-mosquitto-notls-gnu; see the justfile).
 project_name: tedge-mosquitto-gnu
 
-# Write to a separate dir so a gnu build and a musl build (which uses the default
-# ./dist) can coexist on one machine — the release flow builds both, and `just
-# publish` uploads both dirs to the package repository.
+# Write to a separate dir (mirrors dist-musl in .goreleaser.musl.yaml) so a gnu
+# build and a musl build can coexist on one machine — the release flow builds
+# both, and `just publish` uploads from these dirs to the package repository.
 dist: dist-gnu
 
 # Append this config's artifacts to the release the musl config already created
