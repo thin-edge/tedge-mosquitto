@@ -186,7 +186,6 @@ nfpms:
 
     # Path that the binaries should be installed.
     bindir: /usr/sbin
-    version_metadata: git
     section: default
     priority: extra
 
