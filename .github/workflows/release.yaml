@@ -26,7 +26,7 @@ jobs:
         with:
           version: ${{ steps.zig-version.outputs.version }}
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
